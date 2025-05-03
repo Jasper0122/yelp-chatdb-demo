@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Yelp Chat</title>
+  <style>
+    body { font-family: sans-serif; background: #f6f6f6; padding: 2rem; }
+    h1.title { text-align: center; margin-bottom: 1rem; color: #3c8dbc; }
+    #chat { max-width: 700px; margin: auto; background: white; border-radius: 10px; padding: 1rem; box-shadow: 0 2px 10px rgba(0,0,0,0.1); }
+    .msg { margin: 1rem 0; padding: 0.75rem 1rem; border-radius: 10px; }
+    .user { background: #d1f3e0; text-align: right; }
+    .bot { background: #f1f1f1; text-align: left; }
+    form { display: flex; max-width: 700px; margin: 1.5rem auto; }
+    input[type=text] { flex: 1; padding: 1rem; border: 1px solid #ccc; border-radius: 10px 0 0 10px; font-size: 1rem; }
+    button { padding: 1rem; border: none; background: #3c8dbc; color: white; font-size: 1rem; border-radius: 0 10px 10px 0; cursor: pointer; }
+    .wishlist-item { display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid #eee; }
+    .wishlist-item img { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; }
+    .wish-link { font-weight: bold; color: #3c8dbc; text-decoration: none; }
+    .remove-btn { background: none; border: none; font-size: 1.2rem; color: crimson; cursor: pointer; }
+    .quick-prompts { text-align: center; margin: 1rem 0; }
+    .quick-prompts button {margin: 0.25rem;padding: 0.5rem 1rem;border: 1px solid #ccc;background: #fff;color: #333; /* ✅ 加粗变深 */font-weight: 500;font-size: 0.95rem;border-radius: 6px;cursor: pointer;}
+    .actions { text-align: center; margin-top: 1rem; }
+    .actions button { margin: 0.5rem; padding: 0.6rem 1rem; background: #444; color: white; border-radius: 6px; border: none; cursor: pointer; }
+    .result { padding: 1rem 0; display: flex; gap: 1rem; align-items: center; border-bottom: 1px solid #eee; }
+    .result img { width: 100px; height: 70px; object-fit: cover; border-radius: 8px; }
+  </style>
+</head>
+<body>
+  <h1 class="title">🍽️ Yelp Chat Assistant</h1>
+  <div id="chat"></div>
+
+  <div class="quick-prompts">
+    <strong style="font-size: 1.1rem;">✨ Try asking:</strong><br />
+    <button onclick="sendMessage('Find sushi in New York')">🍣 Find sushi in New York</button>
+    <button onclick="sendMessage('Find top rated ramen in Los Angeles')">🍜 Top-rated ramen in LA</button>
+  </div>
+
+  <form id="input-form">
+    <input type="text" id="user-input" placeholder="Ask something..." autocomplete="off" />
+    <button type="submit">Send</button>
+  </form>
+
+  <div class="actions">
+    <button onclick="sendMessage('show chat history')">🕘 View chat history</button>
+    <button onclick="sendMessage('view my wishlist')">📋 View wishlist</button>
+  </div>
+
+  <script>
+    const form = document.getElementById("input-form");
+    const input = document.getElementById("user-input");
+
+    function appendMessage(role, content, isHTML = false) {
+      const msg = document.createElement("div");
+      msg.className = `msg ${role}`;
+      if (isHTML) {
+        msg.innerHTML = content;
+      } else {
+        msg.textContent = content;
+      }
+      document.getElementById("chat").appendChild(msg);
+      msg.scrollIntoView({ behavior: "smooth" });
+    }
+
+    async function sendMessage(text) {
+      appendMessage("user", text);
+      input.value = "";
+
+      const res = await fetch("/search", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query: text, session_id: "test-frontend" }),
+      });
+
+      const data = await res.json();
+      if (data.status === "complete") {
+        const html = data.results.map(r => `
+          <div class="result">
+            <img src="${r.img}" alt="${r.name}" />
+            <div>
+              <strong><a href="${r.url}" target="_blank">${r.name}</a></strong><br/>
+              ⭐ ${r.rating} | ${r.address || ''} | ${r.price || ''}
+            </div>
+          </div>
+        `).join("");
+        appendMessage("bot", data.summary + html, true);
+      } else if (data.status === "wishlist") {
+        appendMessage("bot", data.msg, true);
+      } else if (data.status === "incomplete") {
+        appendMessage("bot", data.followup);
+      } else if (data.status === "chat" || data.status === "history") {
+        appendMessage("bot", data.msg, true);
+      }
+    }
+
+    form.addEventListener("submit", (e) => {
+      e.preventDefault();
+      const text = input.value.trim();
+      if (text) sendMessage(text);
+    });
+
+    document.addEventListener("click", (e) => {
+      if (e.target.classList.contains("remove-btn")) {
+        const name = e.target.closest(".wishlist-item")?.querySelector(".wish-link")?.textContent;
+        if (name) {
+          sendMessage(`remove ${name} from my wishlist`);
+        }
+      }
+    });
+  </script>
+</body>
+</html>
